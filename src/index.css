@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+  }
+
+  body {
+    @apply bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100;
+  }
+}
+
+@layer components {
+  /* Logo styling - remove white background in dark mode using mix-blend-mode */
+  .dark img[src="/logo.svg"] {
+    mix-blend-mode: screen;
+    background-color: transparent;
+  }
+  
+  /* If screen doesn't work well, try multiply for dark backgrounds */
+  /* Uncomment the line below and comment out the mix-blend-mode: screen above if needed */
+  /* mix-blend-mode: multiply; */
+}
+
+@layer utilities {
+  @keyframes banner-slide-in {
+    0% {
+      opacity: 0;
+      transform: translateX(-12px);
+    }
+    20%,
+    80% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(12px);
+    }
+  }
+
+  .banner-slide-in {
+    animation: banner-slide-in 8s ease-in-out infinite;
+  }
+}

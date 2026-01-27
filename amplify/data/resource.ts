@@ -1,0 +1,124 @@
+import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
+
+const schema = a.schema({
+  User: a
+    .model({
+      email: a.string().required(),
+      name: a.string(),
+      dateOfBirth: a.string(),
+      profileCompleted: a.boolean().default(false),
+    })
+    .authorization((allow) => [allow.owner()]),
+
+  HealthData: a
+    .model({
+      disease: a.string(),
+      diagnosis: a.string(),
+      currentTreatments: a.string(),
+      treatmentGoals: a.string(),
+      initialSymptoms: a.string(),
+    })
+    .authorization((allow) => [allow.owner()]),
+
+  Goal: a
+    .model({
+      title: a.string().required(),
+      description: a.string(),
+      targetDate: a.datetime(),
+      completed: a.boolean().default(false),
+    })
+    .authorization((allow) => [allow.owner()]),
+
+  GratitudeEntry: a
+    .model({
+      content: a.string().required(),
+      date: a.date().required(),
+    })
+    .authorization((allow) => [allow.owner()]),
+
+  Task: a
+    .model({
+      title: a.string().required(),
+      description: a.string(),
+      type: a.enum(['DAILY', 'WEEKLY', 'MONTHLY']),
+      completed: a.boolean().default(false),
+      dueDate: a.datetime(),
+    })
+    .authorization((allow) => [allow.owner()]),
+
+  HealthMetric: a
+    .model({
+      name: a.string().required(),
+      value: a.string(),
+      unit: a.string(),
+      date: a.date().required(),
+      notes: a.string(),
+    })
+    .authorization((allow) => [allow.owner()]),
+
+  Document: a
+    .model({
+      filename: a.string().required(),
+      fileType: a.string().required(),
+      fileSize: a.integer(),
+      s3Key: a.string().required(),
+      uploadedAt: a.datetime().required(),
+      extractedText: a.string(),
+    })
+    .authorization((allow) => [allow.owner()]),
+
+  Message: a
+    .model({
+      role: a.enum(['user', 'assistant']),
+      content: a.string().required(),
+      conversationId: a.string().required(),
+    })
+    .authorization((allow) => [allow.owner()]),
+
+  HealthSummary: a
+    .model({
+      summary: a.string().required(),
+      generatedAt: a.datetime().required(),
+      period: a.enum(['DAILY', 'WEEKLY', 'MONTHLY']),
+    })
+    .authorization((allow) => [allow.owner()]),
+});
+
+export type Schema = ClientSchema<typeof schema>;
+
+export const data = defineData({
+  schema,
+  authorizationModes: {
+    defaultAuthorizationMode: 'userPool',
+  },
+});
+
+/*== STEP 2 ===============================================================
+Go to your frontend source code. From your client-side code, generate a
+Data client to make CRUDL requests to your table. (THIS SNIPPET WILL ONLY
+WORK IN THE FRONTEND CODE FILE.)
+
+Using JavaScript or Next.js React Server Components, Middleware, Server 
+Actions or Pages Router? Review how to generate Data clients for those use
+cases: https://docs.amplify.aws/gen2/build-a-backend/data/connect-to-API/
+=========================================================================*/
+
+/*
+"use client"
+import { generateClient } from "aws-amplify/data";
+import type { Schema } from "@/amplify/data/resource";
+
+const client = generateClient<Schema>() // use this Data client for CRUDL requests
+*/
+
+/*== STEP 3 ===============================================================
+Fetch records from the database and use them in your frontend component.
+(THIS SNIPPET WILL ONLY WORK IN THE FRONTEND CODE FILE.)
+=========================================================================*/
+
+/* For example, in a React component, you can use this snippet in your
+  function's RETURN statement */
+// const { data: todos } = await client.models.Todo.list()
+
+// return <ul>{todos.map(todo => <li key={todo.id}>{todo.content}</li>)}</ul>
+

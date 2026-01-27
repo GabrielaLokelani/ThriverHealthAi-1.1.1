@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear LocalStorage - ThriverHealth.AI</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #ea580c;
+            margin-top: 0;
+        }
+        button {
+            background: #ea580c;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #c2410c;
+        }
+        .success {
+            background: #10b981;
+            color: white;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 20px;
+            display: none;
+        }
+        .info {
+            background: #f3f4f6;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+        code {
+            background: #f3f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 Clear LocalStorage</h1>
+        <p>This tool helps you clear ThriverHealth.AI data from your browser's localStorage.</p>
+        
+        <div class="info">
+            <strong>What will be cleared:</strong>
+            <ul>
+                <li><code>userProfile</code> - User profile data</li>
+                <li><code>profileCompleted</code> - Profile completion flag</li>
+                <li><code>policyAcceptance</code> - Policy acceptance records</li>
+                <li><code>ai_conversations</code> - AI conversation list</li>
+                <li><code>ai_messages_*</code> - All conversation messages</li>
+            </ul>
+        </div>
+
+        <button onclick="clearThriverData()">Clear ThriverHealth.AI Data</button>
+        <button onclick="clearAll()" style="background: #dc2626;">Clear All LocalStorage</button>
+
+        <div id="success" class="success"></div>
+    </div>
+
+    <script>
+        function clearThriverData() {
+            const keys = [
+                'userProfile',
+                'profileCompleted',
+                'policyAcceptance'
+            ];
+
+            // Clear AI conversations
+            const conversationKey = 'ai_conversations';
+            if (localStorage.getItem(conversationKey)) {
+                const conversations = JSON.parse(localStorage.getItem(conversationKey));
+                conversations.forEach(conv => {
+                    localStorage.removeItem(`ai_messages_${conv.id}`);
+                });
+                localStorage.removeItem(conversationKey);
+            }
+
+            // Clear all ai_messages_ keys
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('ai_messages_')) {
+                    localStorage.removeItem(key);
+                }
+            });
+
+            // Clear other keys
+            keys.forEach(key => {
+                localStorage.removeItem(key);
+            });
+
+            showSuccess('✅ ThriverHealth.AI data cleared successfully!');
+        }
+
+        function clearAll() {
+            if (confirm('Are you sure you want to clear ALL localStorage data? This will affect all websites.')) {
+                localStorage.clear();
+                showSuccess('✅ All localStorage cleared!');
+            }
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.getElementById('success');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            setTimeout(() => {
+                successDiv.style.display = 'none';
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
+
