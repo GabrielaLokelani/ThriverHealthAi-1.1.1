@@ -285,6 +285,7 @@ export function AIAgent() {
     try {
       // TODO: Get user health context from backend
       const response = await grokClient.queryHealth(userMessage.content, {
+        conversationId: activeConversationId,
         recentMessages: messages.slice(-5).map((m) => ({
           role: m.role,
           content: m.content,

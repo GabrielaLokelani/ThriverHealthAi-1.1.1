@@ -28,11 +28,14 @@ Use this checklist to track your progress through the deployment and setup proce
 
 ### Step 2: Configure Grok API
 
-- [ ] Obtain Grok API credentials
+- [ ] Obtain X AI credentials
 - [ ] Create `.env.local` file from `.env.local.example`
-- [ ] Add your Grok API URL and key
+- [ ] Add your X AI API URL and key
 - [ ] Restart dev server to load environment variables
 - [ ] Test API connection (will need backend deployed first)
+ - [ ] Provision MemoryDB (Redis) in a VPC
+ - [ ] Export `AMPLIFY_VPC_ID` for backend deployment
+ - [ ] Set Amplify secrets for ai-chat (X AI + Redis + CORS)
 
 ### Step 3: Connect Data Components
 

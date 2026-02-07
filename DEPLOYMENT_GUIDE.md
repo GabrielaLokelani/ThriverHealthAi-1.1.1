@@ -39,16 +39,42 @@ Before deploying, ensure you have:
 
 1. Create a `.env.local` file in the root directory:
    ```env
-   VITE_GROK_API_URL=https://api.x.ai/v1
-   VITE_GROK_API_KEY=your_api_key_here
+   VITE_XAI_API_URL=https://api.x.ai/v1
+   VITE_XAI_API_KEY=your_api_key_here
    VITE_AWS_REGION=us-east-1
    ```
 
-2. Replace `your_api_key_here` with your actual Grok API key
+2. Replace `your_api_key_here` with your actual X AI API key
 
 3. **Important**: Never commit `.env.local` to git (it's already in `.gitignore`)
 
-4. For production, use AWS Secrets Manager or Amplify environment variables
+4. For production, use Amplify secrets (see Step 2b)
+
+## Step 2b: Configure AI Chat Backend (X AI + MemoryDB + DynamoDB)
+
+1. Create or select a VPC and MemoryDB cluster (Redis). Note the VPC ID and Redis connection details.
+2. Export VPC settings before deployment:
+   ```bash
+   export AMPLIFY_VPC_ID=vpc-xxxxxxxx
+   export AMPLIFY_PRIVATE_SUBNET_IDS=subnet-aaaaaaa,subnet-bbbbbbb
+   export AMPLIFY_VPC_AZS=us-east-1a,us-east-1b
+   export AMPLIFY_LAMBDA_SG_ID=sg-xxxxxxxx
+   ```
+3. Set Amplify secrets for the `ai-chat` function:
+   ```bash
+   npx ampx sandbox secret set XAI_API_URL
+   npx ampx sandbox secret set XAI_API_KEY
+   npx ampx sandbox secret set REDIS_HOST
+   npx ampx sandbox secret set REDIS_PORT
+   npx ampx sandbox secret set REDIS_USERNAME
+   npx ampx sandbox secret set REDIS_PASSWORD
+   npx ampx sandbox secret set CORS_ORIGIN
+   npx ampx sandbox secret set AI_SYSTEM_PROMPT
+   ```
+4. Redeploy the backend:
+   ```bash
+   npx ampx sandbox --once
+   ```
 
 ## Step 3: Connect Data Components
 
