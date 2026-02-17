@@ -55,7 +55,7 @@ jobs:
   secure_sandbox_deploy:
     runs-on: ubuntu-latest
     needs: guardrails
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_secure_sandbox_deploy && secrets.AWS_DEPLOY_ROLE_ARN != '' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_secure_sandbox_deploy }}
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
       AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
@@ -87,15 +87,4 @@ jobs:
 
       - name: Deploy and verify
         run: npm run amplify:sandbox:secure
-
-  deploy_role_not_configured:
-    runs-on: ubuntu-latest
-    needs: guardrails
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_secure_sandbox_deploy && secrets.AWS_DEPLOY_ROLE_ARN == '' }}
-    steps:
-      - name: Missing deploy role
-        run: |
-          echo "Requested secure sandbox deploy, but AWS_DEPLOY_ROLE_ARN is not configured."
-          echo "Create a separate deploy role and add it as repository secret AWS_DEPLOY_ROLE_ARN."
-          exit 1
 
