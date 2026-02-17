@@ -44,4 +44,5 @@ This checklist separates technical controls in code/infrastructure from operatio
 - Runs guardrails automatically on pull requests to `main` and pushes to `main`.
 - Optional manual secure deploy is available through workflow dispatch.
 - Required repository secret: `AWS_GUARDRAILS_ROLE_ARN` (IAM role ARN trusted for GitHub OIDC).
+- Optional deploy repository secret: `AWS_DEPLOY_ROLE_ARN` (separate higher-privilege deploy role for `ampx sandbox --once`).
 - Optional repository variable: `AWS_REGION` (defaults to `us-east-1`).

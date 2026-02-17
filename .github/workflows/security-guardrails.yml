@@ -55,10 +55,10 @@ jobs:
   secure_sandbox_deploy:
     runs-on: ubuntu-latest
     needs: guardrails
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_secure_sandbox_deploy }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_secure_sandbox_deploy && secrets.AWS_DEPLOY_ROLE_ARN != '' }}
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
-      AWS_GUARDRAILS_ROLE_ARN: ${{ secrets.AWS_GUARDRAILS_ROLE_ARN }}
+      AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -74,17 +74,28 @@ jobs:
 
       - name: Validate required secret
         run: |
-          if [ -z "${AWS_GUARDRAILS_ROLE_ARN}" ]; then
-            echo "Missing required secret: AWS_GUARDRAILS_ROLE_ARN"
+          if [ -z "${AWS_DEPLOY_ROLE_ARN}" ]; then
+            echo "Missing required secret: AWS_DEPLOY_ROLE_ARN"
             exit 1
           fi
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.AWS_GUARDRAILS_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Deploy and verify
         run: npm run amplify:sandbox:secure
+
+  deploy_role_not_configured:
+    runs-on: ubuntu-latest
+    needs: guardrails
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_secure_sandbox_deploy && secrets.AWS_DEPLOY_ROLE_ARN == '' }}
+    steps:
+      - name: Missing deploy role
+        run: |
+          echo "Requested secure sandbox deploy, but AWS_DEPLOY_ROLE_ARN is not configured."
+          echo "Create a separate deploy role and add it as repository secret AWS_DEPLOY_ROLE_ARN."
+          exit 1
 
