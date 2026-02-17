@@ -5,6 +5,7 @@ export function DocumentList() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     // TODO: Fetch documents from Amplify Data
@@ -24,16 +25,16 @@ export function DocumentList() {
         setSelectedDocument(null);
       }
     } catch (error) {
-      console.error('Error deleting document:', error);
+      setError('Unable to delete the document. Please try again later.');
     }
   };
 
-  const handleDownload = async (document: Document) => {
+  const handleDownload = async (_document: Document) => {
     try {
       // TODO: Generate signed URL and download
-      window.open(document.s3Key, '_blank');
+      setError('Downloads will be available once secure storage is connected.');
     } catch (error) {
-      console.error('Error downloading document:', error);
+      setError('Unable to download the document. Please try again later.');
     }
   };
 
@@ -71,6 +72,12 @@ export function DocumentList() {
       <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
         Your Documents
       </h2>
+
+      {error && (
+        <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded">
+          {error}
+        </div>
+      )}
 
       {loading ? (
         <div className="animate-pulse space-y-4">

@@ -1,15 +1,66 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import type { Goal } from '@/types/health';
+import {
+  listStoredGoals,
+  regenerateAndStoreGoals,
+  toggleStoredGoal,
+} from '@/lib/health-tracker';
 
 export function GoalsTracker() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const loadGoals = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const stored = await listStoredGoals();
+      if (stored.length > 0) {
+        setGoals(stored);
+      } else {
+        const generated = await regenerateAndStoreGoals();
+        setGoals(generated);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Unable to generate goals right now.');
+      setGoals([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefreshFromChat = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const refreshed = await regenerateAndStoreGoals();
+      setGoals(refreshed);
+    } catch (err: any) {
+      setError(err.message || 'Unable to refresh goals right now.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // TODO: Fetch goals from Amplify Data
-    setGoals([]);
-    setLoading(false);
+    loadGoals();
   }, []);
+
+  const toggleGoalCompletion = async (goalId: string) => {
+    const selected = goals.find((goal) => goal.id === goalId);
+    if (!selected) return;
+
+    try {
+      const updated = await toggleStoredGoal(selected);
+      setGoals((prev) =>
+        prev.map((goal) => (goal.id === goalId ? updated : goal))
+      );
+    } catch {
+      // Keep current UI state if persistence fails.
+    }
+  };
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -17,10 +68,19 @@ export function GoalsTracker() {
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
           Goals
         </h2>
-        <button className="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400">
-          Add Goal
+        <button
+          className="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 disabled:opacity-60"
+          onClick={handleRefreshFromChat}
+          disabled={loading}
+        >
+          Refresh from Chat
         </button>
       </div>
+      {error && (
+        <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded">
+          {error}
+        </div>
+      )}
       {loading ? (
         <div className="animate-pulse space-y-4">
           <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
@@ -42,8 +102,14 @@ export function GoalsTracker() {
             />
           </svg>
           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-            No goals set yet. Create your first goal!
+            No goals found yet. Complete guided intake and ask about what you want to improve.
           </p>
+          <Link
+            to="/ai-agent?guided=1"
+            className="mt-4 inline-flex items-center px-4 py-2 border border-primary-500 text-primary-600 dark:text-primary-400 rounded-md hover:bg-primary-50 dark:hover:bg-primary-900/20 text-sm"
+          >
+            Start Guided Intake
+          </Link>
         </div>
       ) : (
         <div className="space-y-3">
@@ -55,9 +121,9 @@ export function GoalsTracker() {
               <input
                 type="checkbox"
                 checked={goal.completed}
-                onChange={() => {
-                  // TODO: Toggle goal completion
-                }}
+                onChange={() => toggleGoalCompletion(goal.id)}
+                aria-label={`Mark goal "${goal.title}" as complete`}
+                title={`Toggle completion for ${goal.title}`}
                 className="mt-1 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
               />
               <div className="flex-1">

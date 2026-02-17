@@ -34,7 +34,7 @@ export function ConfirmSignUp() {
       if (result.isSignUpComplete) {
         setSuccess(true);
         setTimeout(() => {
-          navigate('/signin');
+          navigate('/signin?onboarding=1');
         }, 2000);
       }
     } catch (err: any) {

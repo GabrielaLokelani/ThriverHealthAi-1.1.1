@@ -65,7 +65,7 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
         filename: file.name,
         fileType: file.type,
         fileSize: file.size,
-        s3Key: `documents/${Date.now()}_${file.name}`,
+        s3Key: `documents/{entity_id}/${Date.now()}_${file.name}`,
         uploadedAt: new Date().toISOString(),
       };
 
@@ -108,6 +108,7 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
           type="file"
           accept=".pdf,.jpg,.jpeg,.png,.txt"
           onChange={handleFileInput}
+          aria-label="Upload health document"
           className="hidden"
           disabled={uploading}
         />
@@ -151,7 +152,7 @@ export function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
       </div>
 
       <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
-        All documents are encrypted and stored securely in compliance with HIPAA regulations.
+        Documents will be stored securely once storage is connected.
       </p>
     </div>
   );

@@ -83,6 +83,9 @@ export function ConversationSidebar({
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onBlur={() => handleFinishRename(conversation.id)}
+            aria-label="Rename conversation"
+            title="Rename conversation"
+            placeholder="Conversation title"
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 handleFinishRename(conversation.id);
@@ -126,8 +129,9 @@ export function ConversationSidebar({
                 </p>
               )}
             </div>
-            <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleStartRename(conversation);
@@ -138,6 +142,7 @@ export function ConversationSidebar({
                     : 'hover:bg-gray-200 dark:hover:bg-gray-600'
                 }`}
                 title="Rename"
+                aria-label={`Rename ${conversation.title}`}
               >
                 <svg
                   className="w-4 h-4"
@@ -154,6 +159,7 @@ export function ConversationSidebar({
                 </svg>
               </button>
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onTogglePin(conversation.id);
@@ -164,6 +170,7 @@ export function ConversationSidebar({
                     : 'hover:bg-gray-200 dark:hover:bg-gray-600'
                 }`}
                 title={conversation.pinned ? 'Unpin' : 'Pin'}
+                aria-label={conversation.pinned ? `Unpin ${conversation.title}` : `Pin ${conversation.title}`}
               >
                 <svg
                   className="w-4 h-4"
@@ -180,6 +187,7 @@ export function ConversationSidebar({
                 </svg>
               </button>
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   if (
@@ -196,6 +204,7 @@ export function ConversationSidebar({
                     : 'hover:bg-gray-200 dark:hover:bg-gray-600'
                 }`}
                 title="Delete"
+                aria-label={`Delete ${conversation.title}`}
               >
                 <svg
                   className="w-4 h-4"
@@ -227,9 +236,11 @@ export function ConversationSidebar({
             Conversations
           </h2>
           <button
+            type="button"
             onClick={onCreateConversation}
             className="p-2 rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors"
             title="New Conversation"
+            aria-label="Create new conversation"
           >
             <svg
               className="w-5 h-5"

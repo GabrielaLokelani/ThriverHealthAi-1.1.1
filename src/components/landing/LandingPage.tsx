@@ -21,8 +21,14 @@ export function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
           <div className="text-center">
             <p className="text-xs md:text-sm tracking-[0.3em] uppercase text-gray-500 dark:text-gray-400">
-              ThriverHealth.AI
+              <span>Thriver</span>
+              <span className="text-primary-500 dark:text-primary-400">Health</span>
+              <span>.AI</span>
             </p>
+            <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
+              This app is experimental and in beta testing. Thank you for your patience as
+              features may change.
+            </div>
             <p className="mt-4 text-lg md:text-2xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
               Your AI-powered health companion for researching diseases, tracking treatments,
               and managing your wellness journey with confidence and clarity.

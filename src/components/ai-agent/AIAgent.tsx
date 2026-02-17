@@ -1,117 +1,276 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { jsPDF } from 'jspdf';
 import { ChatMessage } from './ChatMessage';
 import { ConversationSidebar } from './ConversationSidebar';
 import { ConversationHeader } from './ConversationHeader';
 import type { Message, Conversation } from '@/types/documents';
 import { grokClient } from '@/lib/api/grok';
 
-const STORAGE_KEY = 'ai_conversations';
-const STORAGE_MESSAGES_PREFIX = 'ai_messages_';
+const GUIDED_INTAKE_STATUS_KEY = 'guidedIntakeStatus';
+const GUIDED_INTAKE_PROMPT = `Let's do a quick guided intake. Please share:\n1) Main condition or concern\n2) Current symptoms and severity\n3) Current treatments/medications\n4) Top health goals\n5) Any recent changes or triggers`;
 
 function generateConversationId(): string {
-  return `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
-function loadConversationsFromStorage(): Conversation[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (e) {
-    console.error('Error loading conversations:', e);
-  }
-  return [];
-}
-
-function saveConversationsToStorage(conversations: Conversation[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
-  } catch (e) {
-    console.error('Error saving conversations:', e);
-  }
-}
-
-function loadMessagesFromStorage(conversationId: string): Message[] {
-  try {
-    const stored = localStorage.getItem(`${STORAGE_MESSAGES_PREFIX}${conversationId}`);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (e) {
-    console.error('Error loading messages:', e);
-  }
-  return [];
-}
-
-function saveMessagesToStorage(conversationId: string, messages: Message[]): void {
-  try {
-    localStorage.setItem(`${STORAGE_MESSAGES_PREFIX}${conversationId}`, JSON.stringify(messages));
-  } catch (e) {
-    console.error('Error saving messages:', e);
-  }
+  return `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
 function generateConversationTitle(firstMessage: string): string {
-  // Extract first few words from the user's first message
   const words = firstMessage.trim().split(/\s+/).slice(0, 5).join(' ');
   return words.length > 50 ? words.substring(0, 47) + '...' : words;
 }
 
+function mapConversationFromBackend(item: {
+  conversationId: string;
+  createdAt: string;
+  updatedAt: string;
+  lastMessage?: string;
+  messageCount: number;
+}): Conversation {
+  return {
+    id: item.conversationId,
+    title: item.lastMessage ? generateConversationTitle(item.lastMessage) : 'Conversation',
+    pinned: false,
+    linkedConversationIds: [],
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    lastMessage: item.lastMessage,
+    messageCount: item.messageCount,
+  };
+}
+
 export function AIAgent() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingConversation, setLoadingConversation] = useState(true);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showGuidedPrompt, setShowGuidedPrompt] = useState(false);
+  const [guidedStatus, setGuidedStatus] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const optimisticMessagesRef = useRef<Record<string, Message[]>>({});
+  const guidedAutoStartedRef = useRef(false);
+  const guidedConversationIdRef = useRef<string | null>(null);
 
-  // Load conversations from storage on mount
+  const createLocalConversation = (): Conversation => ({
+    id: generateConversationId(),
+    title: 'New Conversation',
+    pinned: false,
+    linkedConversationIds: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    messageCount: 0,
+  });
+
+  const upsertConversation = (conversation: Conversation) => {
+    setConversations((prev) => {
+      const existing = prev.find((item) => item.id === conversation.id);
+      if (!existing) {
+        return [conversation, ...prev];
+      }
+      return prev.map((item) => (item.id === conversation.id ? conversation : item));
+    });
+  };
+
   useEffect(() => {
-    const loadedConversations = loadConversationsFromStorage();
-    setConversations(loadedConversations);
+    let cancelled = false;
 
-    // If there are conversations, select the most recent one
-    if (loadedConversations.length > 0) {
-      // Prioritize pinned conversations, then most recent
-      const sorted = [...loadedConversations].sort((a, b) => {
-        if (a.pinned && !b.pinned) return -1;
-        if (!a.pinned && b.pinned) return 1;
-        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-      });
-      setActiveConversationId(sorted[0].id);
-    } else {
-      // Create initial conversation
-      handleCreateConversation();
-    }
+    const initialize = async () => {
+      setLoadingConversation(true);
+      try {
+        if (grokClient.hasBackend()) {
+          const remote = await grokClient.listConversations();
+          if (cancelled) return;
+          const mapped = remote.map(mapConversationFromBackend);
+          setConversations(mapped);
+          if (mapped.length > 0) {
+            setActiveConversationId(mapped[0].id);
+          } else {
+            const localConversation = createLocalConversation();
+            setConversations([localConversation]);
+            setActiveConversationId(localConversation.id);
+          }
+        } else {
+          const localConversation = createLocalConversation();
+          setConversations([localConversation]);
+          setActiveConversationId(localConversation.id);
+        }
+      } catch {
+        const localConversation = createLocalConversation();
+        setConversations([localConversation]);
+        setActiveConversationId(localConversation.id);
+      } finally {
+        if (!cancelled) {
+          setLoadingConversation(false);
+        }
+      }
+    };
+
+    initialize();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Load messages when conversation changes
+  const startGuidedIntake = (shouldClearGuidedQuery = true) => {
+    if (!activeConversationId) {
+      return;
+    }
+
+    guidedConversationIdRef.current = activeConversationId;
+    localStorage.setItem(GUIDED_INTAKE_STATUS_KEY, 'started');
+    setGuidedStatus('started');
+    setShowGuidedPrompt(false);
+
+    if (shouldClearGuidedQuery) {
+      setSearchParams({}, { replace: true });
+    }
+
+    const guidedMessage: Message = {
+      id: `guided_${Date.now()}`,
+      role: 'assistant',
+      content: GUIDED_INTAKE_PROMPT,
+      conversationId: activeConversationId,
+      createdAt: new Date().toISOString(),
+    };
+
+    setMessages((prev) => {
+      const alreadyPresent = prev.some(
+        (item) =>
+          item.role === 'assistant' &&
+          item.conversationId === activeConversationId &&
+          item.content === GUIDED_INTAKE_PROMPT
+      );
+      const nextMessages = alreadyPresent ? prev : [...prev, guidedMessage];
+      optimisticMessagesRef.current[activeConversationId] = nextMessages;
+      return nextMessages;
+    });
+  };
+
   useEffect(() => {
-    if (activeConversationId) {
-      const loadedMessages = loadMessagesFromStorage(activeConversationId);
-      if (loadedMessages.length > 0) {
-        setMessages(loadedMessages);
-      } else {
-        // Initialize with welcome message
-        const welcomeMessage: Message = {
-          id: 'welcome',
+    const guidedRequested = searchParams.get('guided') === '1';
+    const storedGuidedStatus = localStorage.getItem(GUIDED_INTAKE_STATUS_KEY);
+    setGuidedStatus(storedGuidedStatus);
+
+    if (guidedRequested) {
+      if (!activeConversationId) {
+        return;
+      }
+      if (!guidedAutoStartedRef.current) {
+        guidedAutoStartedRef.current = true;
+        startGuidedIntake(true);
+      }
+      return;
+    }
+
+    guidedAutoStartedRef.current = false;
+    setShowGuidedPrompt(storedGuidedStatus === 'pending');
+  }, [searchParams, activeConversationId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMessages = async () => {
+      if (!activeConversationId) {
+        setMessages([]);
+        return;
+      }
+
+      const welcomeMessage: Message = {
+        id: 'welcome',
+        role: 'assistant',
+        content:
+          "Hello! I'm your AI health assistant. I can help you research diseases, explore treatment options, and answer questions about your health journey. How can I help you today?",
+        conversationId: activeConversationId,
+        createdAt: new Date().toISOString(),
+      };
+
+      const shouldInjectGuided =
+        guidedConversationIdRef.current !== null &&
+        guidedConversationIdRef.current === activeConversationId;
+
+      const injectGuidedPromptIfNeeded = (list: Message[]): Message[] => {
+        if (!shouldInjectGuided) {
+          return list;
+        }
+        const hasGuidedPrompt = list.some(
+          (item) => item.role === 'assistant' && item.content === GUIDED_INTAKE_PROMPT
+        );
+        if (hasGuidedPrompt) {
+          return list;
+        }
+        const guidedInjectedMessage: Message = {
+          id: `guided_${Date.now()}`,
           role: 'assistant',
-          content: 'Hello! I\'m your AI health assistant. I can help you research diseases, explore treatment options, and answer questions about your health journey. How can I help you today?',
+          content: GUIDED_INTAKE_PROMPT,
           conversationId: activeConversationId,
           createdAt: new Date().toISOString(),
         };
-        setMessages([welcomeMessage]);
-        saveMessagesToStorage(activeConversationId, [welcomeMessage]);
+        return [
+          ...list,
+          guidedInjectedMessage,
+        ];
+      };
+
+      if (activeConversationId.startsWith('temp_') || !grokClient.hasBackend()) {
+        const optimistic = optimisticMessagesRef.current[activeConversationId];
+        const localMessages = optimistic && optimistic.length > 0 ? optimistic : [welcomeMessage];
+        const nextMessages = injectGuidedPromptIfNeeded(localMessages);
+        setMessages(nextMessages);
+        optimisticMessagesRef.current[activeConversationId] = nextMessages;
+        return;
       }
-    } else {
-      setMessages([]);
-    }
+
+      const optimistic = optimisticMessagesRef.current[activeConversationId];
+      if (optimistic && optimistic.length > 0) {
+        setMessages(optimistic);
+      }
+
+      try {
+        const response = await grokClient.fetchConversationMessages(activeConversationId);
+        if (cancelled) return;
+        if (response.messages.length === 0) {
+          if (optimistic && optimistic.length > 0) {
+            return;
+          }
+          const nextMessages = injectGuidedPromptIfNeeded([welcomeMessage]);
+          setMessages(nextMessages);
+          optimisticMessagesRef.current[activeConversationId] = nextMessages;
+          return;
+        }
+        const mappedMessages = response.messages.map((item, index) => ({
+          id: `${activeConversationId}_${item.createdAt || index}`,
+          role: item.role,
+          content: item.content,
+          conversationId: activeConversationId,
+          createdAt: item.createdAt || new Date().toISOString(),
+        }));
+        const nextMessages = injectGuidedPromptIfNeeded(mappedMessages);
+        setMessages(nextMessages);
+        optimisticMessagesRef.current[activeConversationId] = nextMessages;
+      } catch {
+        if (!cancelled) {
+          if (optimistic && optimistic.length > 0) {
+            return;
+          }
+          const nextMessages = injectGuidedPromptIfNeeded([welcomeMessage]);
+          setMessages(nextMessages);
+          optimisticMessagesRef.current[activeConversationId] = nextMessages;
+        }
+      }
+    };
+
+    loadMessages();
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeConversationId]);
 
-  // Update conversation's last message and message count
   useEffect(() => {
     if (activeConversationId && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
@@ -132,7 +291,6 @@ export function AIAgent() {
           }
           return conv;
         });
-        saveConversationsToStorage(updated);
         return updated;
       });
     }
@@ -143,21 +301,11 @@ export function AIAgent() {
   }, [messages]);
 
   const handleCreateConversation = () => {
-    const newId = generateConversationId();
-    const newConversation: Conversation = {
-      id: newId,
-      title: 'New Conversation',
-      pinned: false,
-      linkedConversationIds: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    const updated = [newConversation, ...conversations];
-    setConversations(updated);
-    saveConversationsToStorage(updated);
-    setActiveConversationId(newId);
+    const newConversation = createLocalConversation();
+    upsertConversation(newConversation);
+    setActiveConversationId(newConversation.id);
     setInput('');
+    setError('');
   };
 
   const handleSelectConversation = (conversationId: string) => {
@@ -168,12 +316,7 @@ export function AIAgent() {
   const handleDeleteConversation = (conversationId: string) => {
     const updated = conversations.filter((c) => c.id !== conversationId);
     setConversations(updated);
-    saveConversationsToStorage(updated);
 
-    // Remove messages from storage
-    localStorage.removeItem(`${STORAGE_MESSAGES_PREFIX}${conversationId}`);
-
-    // If deleting active conversation, switch to another or create new
     if (conversationId === activeConversationId) {
       if (updated.length > 0) {
         const sorted = [...updated].sort((a, b) => {
@@ -193,7 +336,6 @@ export function AIAgent() {
       c.id === conversationId ? { ...c, title: newTitle, updatedAt: new Date().toISOString() } : c
     );
     setConversations(updated);
-    saveConversationsToStorage(updated);
   };
 
   const handleTogglePin = (conversationId: string) => {
@@ -203,7 +345,6 @@ export function AIAgent() {
         : c
     );
     setConversations(updated);
-    saveConversationsToStorage(updated);
   };
 
   const handleLinkConversation = (linkedConversationId: string) => {
@@ -223,7 +364,6 @@ export function AIAgent() {
       return c;
     });
     setConversations(updated);
-    saveConversationsToStorage(updated);
   };
 
   const handleExportConversation = () => {
@@ -232,28 +372,102 @@ export function AIAgent() {
     const conversation = conversations.find((c) => c.id === activeConversationId);
     if (!conversation) return;
 
-    const exportData = {
-      title: conversation.title,
-      createdAt: conversation.createdAt,
-      exportedAt: new Date().toISOString(),
-      messages: messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-        timestamp: m.createdAt,
-      })),
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 40;
+    const marginY = 40;
+    const lineHeight = 16;
+    const contentWidth = pageWidth - marginX * 2;
+    const bubblePadding = 10;
+
+    let cursorY = marginY;
+
+    const drawPageHeader = () => {
+      doc.setFillColor(249, 115, 22);
+      doc.rect(0, 0, pageWidth, 26, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.text('ThriverHealth.AI - Conversation Export', marginX, 17);
+      doc.setTextColor(17, 24, 39);
+      cursorY = marginY;
     };
 
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-      type: 'application/json',
+    const ensureRoom = (requiredHeight: number) => {
+      if (cursorY + requiredHeight > pageHeight - marginY) {
+        doc.addPage();
+        drawPageHeader();
+      }
+    };
+
+    drawPageHeader();
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.text(conversation.title || 'Conversation Export', marginX, cursorY);
+    cursorY += 22;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(75, 85, 99);
+    const exportedAt = new Date().toLocaleString();
+    doc.text(`Exported: ${exportedAt}`, marginX, cursorY);
+    cursorY += 18;
+    doc.text('For personal health tracking and discussion support.', marginX, cursorY);
+    cursorY += 20;
+    doc.setDrawColor(229, 231, 235);
+    doc.line(marginX, cursorY, pageWidth - marginX, cursorY);
+    cursorY += 18;
+
+    if (messages.length === 0) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(12);
+      doc.setTextColor(55, 65, 81);
+      doc.text('No messages in this conversation yet.', marginX, cursorY);
+    }
+
+    messages.forEach((message) => {
+      const isAssistant = message.role === 'assistant';
+      const roleLabel = isAssistant ? 'AI Assistant' : 'You';
+      const timestamp = message.createdAt
+        ? new Date(message.createdAt).toLocaleString()
+        : 'Unknown time';
+      const bubbleTopPadding = 22;
+      const wrappedLines = doc.splitTextToSize(
+        message.content || '(No message text)',
+        contentWidth - bubblePadding * 2
+      ) as string[];
+      const bubbleHeight = bubbleTopPadding + wrappedLines.length * lineHeight + bubblePadding;
+
+      ensureRoom(bubbleHeight + 12);
+
+      doc.setFillColor(isAssistant ? 239 : 255, isAssistant ? 246 : 255, isAssistant ? 255 : 247);
+      doc.setDrawColor(isAssistant ? 191 : 251, isAssistant ? 219 : 146, isAssistant ? 254 : 60);
+      doc.roundedRect(marginX, cursorY, contentWidth, bubbleHeight, 8, 8, 'FD');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(isAssistant ? 30 : 154, isAssistant ? 64 : 52, isAssistant ? 175 : 18);
+      doc.text(`${roleLabel} - ${timestamp}`, marginX + bubblePadding, cursorY + 14);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      doc.setTextColor(17, 24, 39);
+      let messageY = cursorY + bubbleTopPadding;
+      wrappedLines.forEach((line) => {
+        doc.text(line, marginX + bubblePadding, messageY);
+        messageY += lineHeight;
+      });
+
+      cursorY += bubbleHeight + 12;
     });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${conversation.title.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+
+    const safeTitle = (conversation.title || 'conversation_export')
+      .replace(/[^a-z0-9]/gi, '_')
+      .replace(/_+/g, '_');
+    const datePart = new Date().toISOString().split('T')[0];
+    doc.save(`${safeTitle}_${datePart}.pdf`);
   };
 
   const handleSend = async (e: React.FormEvent) => {
@@ -270,7 +484,6 @@ export function AIAgent() {
 
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
-    saveMessagesToStorage(activeConversationId, updatedMessages);
     setInput('');
     setLoading(true);
     setError('');
@@ -283,9 +496,8 @@ export function AIAgent() {
     }
 
     try {
-      // TODO: Get user health context from backend
       const response = await grokClient.queryHealth(userMessage.content, {
-        conversationId: activeConversationId,
+        conversationId: activeConversationId.startsWith('temp_') ? undefined : activeConversationId,
         recentMessages: messages.slice(-5).map((m) => ({
           role: m.role,
           content: m.content,
@@ -302,15 +514,59 @@ export function AIAgent() {
 
       const finalMessages = [...updatedMessages, assistantMessage];
       setMessages(finalMessages);
-      saveMessagesToStorage(activeConversationId, finalMessages);
 
-      // TODO: Save messages to DynamoDB when backend is connected
+      const resolvedConversationId = response.conversationId || activeConversationId;
+      const normalizedFinalMessages = finalMessages.map((item) => ({
+        ...item,
+        conversationId: resolvedConversationId,
+      }));
+      optimisticMessagesRef.current[resolvedConversationId] = normalizedFinalMessages;
+      if (resolvedConversationId !== activeConversationId) {
+        if (guidedConversationIdRef.current === activeConversationId) {
+          guidedConversationIdRef.current = resolvedConversationId;
+        }
+        const existing = conversations.find((c) => c.id === activeConversationId);
+        if (existing) {
+          const replacement: Conversation = {
+            ...existing,
+            id: resolvedConversationId,
+            title:
+              existing.title === 'New Conversation'
+                ? generateConversationTitle(userMessage.content)
+                : existing.title,
+            updatedAt: new Date().toISOString(),
+          };
+          setConversations((prev) =>
+            prev.map((c) => (c.id === activeConversationId ? replacement : c))
+          );
+        }
+        setActiveConversationId(resolvedConversationId);
+      }
+
+      if (localStorage.getItem(GUIDED_INTAKE_STATUS_KEY) === 'started') {
+        localStorage.setItem(GUIDED_INTAKE_STATUS_KEY, 'completed');
+        setGuidedStatus('completed');
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to get response from AI agent');
-      console.error('Error sending message:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleStartGuidedIntake = () => {
+    if (!activeConversationId) {
+      handleCreateConversation();
+      return;
+    }
+    startGuidedIntake(true);
+  };
+
+  const handleSkipGuidedIntake = () => {
+    localStorage.setItem(GUIDED_INTAKE_STATUS_KEY, 'skipped');
+    setGuidedStatus('skipped');
+    setShowGuidedPrompt(false);
+    setSearchParams({}, { replace: true });
   };
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId) || null;
@@ -343,8 +599,61 @@ export function AIAgent() {
           onSelectConversation={handleSelectConversation}
         />
 
+        {showGuidedPrompt && (
+          <div className="mx-4 mt-4 rounded-lg border border-primary-200 bg-primary-50 dark:border-primary-900/40 dark:bg-primary-900/20 p-4">
+            <h3 className="text-sm font-semibold text-primary-800 dark:text-primary-200">
+              Guided First Chat
+            </h3>
+            <p className="mt-1 text-sm text-primary-700 dark:text-primary-300">
+              We can quickly gather your key health context in chat. You can skip for now and do
+              this anytime later.
+            </p>
+            <div className="mt-3 flex gap-3">
+              <button
+                onClick={handleStartGuidedIntake}
+                className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm"
+              >
+                Start Guided Chat
+              </button>
+              <button
+                onClick={handleSkipGuidedIntake}
+                className="px-4 py-2 border border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300 rounded-md hover:bg-primary-100/60 dark:hover:bg-primary-900/30 text-sm"
+              >
+                Skip for Now
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!showGuidedPrompt && guidedStatus === 'skipped' && (
+          <div className="mx-4 mt-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              You skipped guided intake earlier. You can still run it anytime to improve your
+              health summary.
+            </p>
+            <button
+              onClick={handleStartGuidedIntake}
+              className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm"
+            >
+              Start Guided Intake
+            </button>
+          </div>
+        )}
+
+        <div className="mx-4 mt-4 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-900/20 p-3">
+          <p className="text-xs text-amber-800 dark:text-amber-200">
+            Thriver AI is educational support only and not a medical diagnosis. If you feel unsafe
+            or think this is urgent, contact emergency services immediately.
+          </p>
+        </div>
+
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-900">
+          {loadingConversation && (
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              Loading conversation...
+            </div>
+          )}
           {messages.map((message) => (
             <ChatMessage key={message.id} message={message} />
           ))}
@@ -360,7 +669,16 @@ export function AIAgent() {
         {/* Error */}
         {error && (
           <div className="mx-4 mb-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded">
-            {error}
+            <div className="flex items-center justify-between gap-4">
+              <span>{error}</span>
+              <button
+                type="button"
+                onClick={() => setError('')}
+                className="text-sm font-medium underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded"
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
         )}
 
@@ -371,16 +689,18 @@ export function AIAgent() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask a question about your health..."
-              className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
+              placeholder="Type your question here (for example: 'What should I ask my doctor?')"
+              aria-label="Message your AI health advisor"
+              className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white text-base"
               disabled={loading}
             />
             <button
               type="submit"
               disabled={!input.trim() || loading}
-              className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Send message"
+              className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed text-base font-semibold"
             >
-              Send
+              Send Message
             </button>
           </div>
         </form>

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/lib/hooks/useAuth';
 
 export function SignIn() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { signIn, user, signOut, refreshUser } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
@@ -12,18 +13,20 @@ export function SignIn() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Check if user is already signed in and handle it
+  const routeAfterAuth = async () => {
+    const shouldRunOnboarding = searchParams.get('onboarding') === '1';
+    if (shouldRunOnboarding) {
+      navigate('/profile-setup', { replace: true });
+      return;
+    }
+    navigate('/dashboard', { replace: true });
+  };
+
   useEffect(() => {
     if (user) {
-      // User is already signed in, check if profile is completed
-      const hasCompletedProfile = localStorage.getItem('profileCompleted');
-      if (!hasCompletedProfile) {
-        navigate('/profile-setup');
-      } else {
-        navigate('/dashboard');
-      }
+      routeAfterAuth();
     }
-  }, [user, navigate]);
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,33 +42,13 @@ export function SignIn() {
       const result = await signIn(formData.email, formData.password);
       
       if (result.isSignedIn) {
-        // Wait for auth state to update - refresh user state
         await refreshUser();
-        // Give it a moment to update
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        // Check if user has completed profile (for now, check localStorage)
-        // In production, this should check the database
-        const hasCompletedProfile = localStorage.getItem('profileCompleted');
-        console.log('✅ Sign-in successful!');
-        console.log('👤 User state:', user ? 'authenticated' : 'not authenticated');
-        console.log('📋 Profile completed status:', hasCompletedProfile);
-        console.log('🔍 Checking if onboarding is needed...');
-        
-        if (!hasCompletedProfile || hasCompletedProfile !== 'true') {
-          console.log('➡️  Redirecting to profile-setup for onboarding');
-          // Clear any old profile data to ensure fresh start
-          localStorage.removeItem('userProfile');
-          // Use window.location to force a full page reload and ensure auth state is set
-          window.location.href = '/profile-setup';
-        } else {
-          console.log('✅ Profile already completed, redirecting to dashboard');
-          navigate('/dashboard', { replace: true });
-        }
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        await routeAfterAuth();
       } else if (result.nextStep?.signInStep === 'CONFIRM_SIGN_IN_WITH_TOTP_CODE') {
         navigate('/confirm-totp', { state: { email: formData.email } });
       } else {
-        navigate('/profile-setup');
+        setError('Additional sign-in steps are required for this account.');
       }
     } catch (err: any) {
       // Handle the "already signed in" error specifically
@@ -90,14 +73,21 @@ export function SignIn() {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
-            Sign in to your account
+            Welcome back
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
+          <p className="mt-2 text-center text-base text-gray-600 dark:text-gray-400">
+            Sign in to continue to your health dashboard.
+          </p>
+          <p className="mt-1 text-center text-sm text-gray-600 dark:text-gray-400">
             Or{' '}
             <Link to="/signup" className="font-medium text-primary-600 hover:text-primary-500">
               create a new account
             </Link>
           </p>
+        </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
+          This app is experimental and in beta testing. Thank you for your patience as features
+          may change.
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
@@ -107,7 +97,7 @@ export function SignIn() {
           )}
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
-              <label htmlFor="email" className="sr-only">
+              <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Email address
               </label>
               <input
@@ -118,12 +108,12 @@ export function SignIn() {
                 required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800 rounded-t-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
+                className="appearance-none rounded-none relative block w-full px-4 py-3 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-base text-gray-900 dark:text-white bg-white dark:bg-gray-800 rounded-t-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10"
                 placeholder="Email address"
               />
             </div>
             <div>
-              <label htmlFor="password" className="sr-only">
+              <label htmlFor="password" className="mb-1 mt-3 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Password
               </label>
               <input
@@ -134,7 +124,7 @@ export function SignIn() {
                 required
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800 rounded-b-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
+                className="appearance-none rounded-none relative block w-full px-4 py-3 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-base text-gray-900 dark:text-white bg-white dark:bg-gray-800 rounded-b-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10"
                 placeholder="Password"
               />
             </div>
@@ -144,9 +134,9 @@ export function SignIn() {
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-base font-semibold rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </div>
         </form>

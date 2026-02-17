@@ -17,7 +17,7 @@ const navigation: NavItem[] = [
     ),
   },
   {
-    name: 'AI Agent',
+    name: 'AI Chat Assistant',
     href: '/ai-agent',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -40,25 +40,29 @@ export function Sidebar() {
   const location = useLocation();
 
   return (
-    <aside className="hidden md:block w-64 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 overflow-y-auto">
+    <aside className="hidden md:block w-72 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex-shrink-0 overflow-y-auto">
       <nav className="p-4 space-y-2">
+        <p className="px-3 pb-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          Main Menu
+        </p>
         {navigation.map((item) => {
           const isActive = location.pathname === item.href;
           return (
             <Link
               key={item.name}
               to={item.href}
+              aria-current={isActive ? 'page' : undefined}
               className={`
-                flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors
+                flex items-center space-x-3 px-4 py-3.5 rounded-lg transition-colors text-base
                 ${
                   isActive
-                    ? 'bg-primary-500 text-white'
+                    ? 'bg-primary-500 text-white shadow-sm'
                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'
                 }
               `}
             >
               {item.icon}
-              <span className="font-medium">{item.name}</span>
+              <span className="font-semibold">{item.name}</span>
             </Link>
           );
         })}

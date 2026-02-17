@@ -1,9 +1,17 @@
 import { useState, useEffect } from 'react';
-import { getCurrentUser, signIn, signUp, confirmSignUp, signOut } from 'aws-amplify/auth';
+import {
+  getCurrentUser,
+  fetchUserAttributes,
+  signIn,
+  signUp,
+  confirmSignUp,
+  signOut,
+} from 'aws-amplify/auth';
 
 interface User {
   userId: string;
   username: string;
+  email?: string;
 }
 
 export function useAuth() {
@@ -19,9 +27,11 @@ export function useAuth() {
       // Only try to get user if Amplify is configured
       // For now, just set loading to false since Amplify isn't configured
       const currentUser = await getCurrentUser();
+      const attributes = await fetchUserAttributes();
       setUser({
         userId: currentUser.userId,
         username: currentUser.username,
+        email: attributes.email,
       });
     } catch (error) {
       // Amplify not configured or user not signed in - this is expected
