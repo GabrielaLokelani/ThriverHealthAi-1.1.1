@@ -20,9 +20,9 @@ permissions:
 jobs:
   guardrails:
     runs-on: ubuntu-latest
-    if: ${{ secrets.AWS_GUARDRAILS_ROLE_ARN != '' }}
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      AWS_GUARDRAILS_ROLE_ARN: ${{ secrets.AWS_GUARDRAILS_ROLE_ARN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,10 +36,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate required secret
+        run: |
+          if [ -z "${AWS_GUARDRAILS_ROLE_ARN}" ]; then
+            echo "Missing required secret: AWS_GUARDRAILS_ROLE_ARN"
+            exit 1
+          fi
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_GUARDRAILS_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_GUARDRAILS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Run security guardrails
@@ -51,6 +58,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_secure_sandbox_deploy }}
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      AWS_GUARDRAILS_ROLE_ARN: ${{ secrets.AWS_GUARDRAILS_ROLE_ARN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -64,21 +72,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate required secret
+        run: |
+          if [ -z "${AWS_GUARDRAILS_ROLE_ARN}" ]; then
+            echo "Missing required secret: AWS_GUARDRAILS_ROLE_ARN"
+            exit 1
+          fi
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_GUARDRAILS_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_GUARDRAILS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Deploy and verify
         run: npm run amplify:sandbox:secure
 
-  missing_role_configuration:
-    runs-on: ubuntu-latest
-    if: ${{ secrets.AWS_GUARDRAILS_ROLE_ARN == '' }}
-    steps:
-      - name: Missing AWS role
-        run: |
-          echo "Missing required secret: AWS_GUARDRAILS_ROLE_ARN"
-          echo "Create an IAM role for GitHub OIDC and add its ARN as repository secret AWS_GUARDRAILS_ROLE_ARN."
-          exit 1
