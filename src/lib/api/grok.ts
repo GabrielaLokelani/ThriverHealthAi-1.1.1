@@ -8,11 +8,21 @@ interface GrokMessage {
   content: string;
 }
 
+export interface ChatAttachmentPayload {
+  type: 'image' | 'video';
+  filename: string;
+  mimeType: string;
+  dataUrl?: string;
+  s3Key?: string;
+}
+
 interface GrokRequest {
   messages: GrokMessage[];
   conversationId?: string;
   context?: string;
   userId?: string;
+  attachments?: ChatAttachmentPayload[];
+  persist?: boolean;
 }
 
 interface GrokResponse {
@@ -144,6 +154,28 @@ class GrokAPIClient {
     return (await response.json()) as ConversationMessagesResponse;
   }
 
+  async deleteConversation(conversationId: string): Promise<void> {
+    if (!this.backendUrl) {
+      return;
+    }
+
+    const token = await this.getAuthToken();
+    const url = new URL(this.backendUrl);
+    url.searchParams.set('conversationId', conversationId);
+
+    const response = await fetch(url.toString(), {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete conversation: ${response.status} ${errorText}`);
+    }
+  }
+
   /**
    * Send a message to the X AI API
    * Note: In production, this should call a Lambda function that handles the API request
@@ -163,6 +195,8 @@ class GrokAPIClient {
           body: JSON.stringify({
             messages: request.messages,
             conversationId: request.conversationId,
+            attachments: request.attachments,
+            persist: request.persist,
           }),
         });
 
@@ -228,6 +262,8 @@ class GrokAPIClient {
       healthData?: string;
       documents?: string[];
       recentMessages?: GrokMessage[];
+      attachments?: ChatAttachmentPayload[];
+      persist?: boolean;
     }
   ): Promise<GrokResponse> {
     const messages: GrokMessage[] = [];
@@ -255,6 +291,8 @@ class GrokAPIClient {
       messages,
       conversationId: context?.conversationId,
       context: context?.healthData,
+      attachments: context?.attachments,
+      persist: context?.persist,
     });
   }
 }

@@ -61,6 +61,7 @@ backend.aiChat.addEnvironment('XAI_REQUEST_TIMEOUT_MS', '20000');
 backend.aiChat.addEnvironment('XAI_FALLBACK_TIMEOUT_MS', '10000');
 backend.aiChat.addEnvironment('XAI_MAX_CONTEXT_MESSAGES', '6');
 backend.aiChat.addEnvironment('XAI_MAX_MESSAGE_CHARS', '1000');
+backend.aiChat.addEnvironment('XAI_MAX_IMAGE_ATTACHMENTS', '3');
 backend.aiChat.addEnvironment('REDIS_ENABLED', 'true');
 backend.aiChat.addEnvironment('REDIS_CONNECT_TIMEOUT_MS', '500');
 backend.aiChat.addEnvironment('REDIS_HOST', secret('REDIS_HOST'));

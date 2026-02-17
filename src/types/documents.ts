@@ -26,5 +26,7 @@ export interface Conversation {
   updatedAt: string;
   lastMessage?: string;
   messageCount?: number;
+  pinHash?: string;
+  isLocked?: boolean;
 }
 

@@ -65,7 +65,7 @@ export async function generateMetricsFromChat(): Promise<HealthMetric[]> {
 
   const response = await grokClient.queryHealth(
     'From the recent health chat context, extract up to 4 practical metrics for the user to track. Return ONLY valid JSON array with objects: { "name": string, "value": string, "unit": string, "date": string, "notes": string }. If value is unknown, use empty string. date should be YYYY-MM-DD (today if unknown).',
-    { recentMessages }
+    { recentMessages, persist: false }
   );
 
   const parsed = extractJsonBlock(response.message);
@@ -97,7 +97,7 @@ export async function generateGoalsFromChat(): Promise<Goal[]> {
 
   const response = await grokClient.queryHealth(
     'From the recent health chat context, extract up to 4 clear user goals. Return ONLY valid JSON array with objects: { "title": string, "description": string, "targetDate": string }. targetDate should be YYYY-MM-DD when known, otherwise empty string.',
-    { recentMessages }
+    { recentMessages, persist: false }
   );
 
   const parsed = extractJsonBlock(response.message);

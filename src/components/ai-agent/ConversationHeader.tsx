@@ -6,6 +6,7 @@ interface ConversationHeaderProps {
   allConversations: Conversation[];
   onRename: (newTitle: string) => void;
   onTogglePin: () => void;
+  onToggleLock: () => void;
   onLinkConversation: (conversationId: string) => void;
   onExport: () => void;
   onSelectConversation: (conversationId: string) => void;
@@ -16,6 +17,7 @@ export function ConversationHeader({
   allConversations,
   onRename,
   onTogglePin,
+  onToggleLock,
   onLinkConversation,
   onExport,
   onSelectConversation,
@@ -88,6 +90,14 @@ export function ConversationHeader({
                     clipRule="evenodd"
                   />
                 </svg>
+              )}
+              {conversation?.isLocked && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                  </svg>
+                  Private
+                </span>
               )}
             </div>
           )}
@@ -204,6 +214,27 @@ export function ConversationHeader({
                   />
                 </svg>
                 <span>{conversation.pinned ? 'Unpin' : 'Pin'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onToggleLock}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm ${
+                  conversation.isLocked
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-gray-700 dark:text-gray-300'
+                }`}
+                title={conversation.isLocked ? 'Remove PIN lock' : 'Set PIN lock'}
+                aria-label={conversation.isLocked ? 'Remove PIN lock' : 'Set PIN lock'}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  {conversation.isLocked ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                  )}
+                </svg>
+                <span>{conversation.isLocked ? 'Private' : 'Lock'}</span>
               </button>
 
               <button

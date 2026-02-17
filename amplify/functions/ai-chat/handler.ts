@@ -2,7 +2,7 @@ import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda
 import { jwtVerify, createRemoteJWKSet } from 'jose';
 import Redis from 'ioredis';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 
 type ChatRole = 'system' | 'user' | 'assistant';
@@ -12,9 +12,19 @@ type ChatMessage = {
   content: string;
 };
 
+type ChatAttachment = {
+  type: 'image' | 'video';
+  filename: string;
+  mimeType: string;
+  dataUrl?: string;
+  s3Key?: string;
+};
+
 type ChatRequest = {
   conversationId?: string;
   messages: ChatMessage[];
+  attachments?: ChatAttachment[];
+  persist?: boolean;
 };
 
 type ChatResponse = {
@@ -68,6 +78,7 @@ const xaiRequestTimeoutMs = Number(process.env.XAI_REQUEST_TIMEOUT_MS || 20000);
 const xaiFallbackTimeoutMs = Number(process.env.XAI_FALLBACK_TIMEOUT_MS || 10000);
 const maxModelContextMessages = Number(process.env.XAI_MAX_CONTEXT_MESSAGES || 6);
 const maxMessageContentChars = Number(process.env.XAI_MAX_MESSAGE_CHARS || 1000);
+const maxImageAttachmentsPerRequest = Number(process.env.XAI_MAX_IMAGE_ATTACHMENTS || 3);
 const primaryModel = XAI_MODEL || 'grok-4-0709';
 const fallbackModel = process.env.XAI_FALLBACK_MODEL || 'grok-4-fast-non-reasoning';
 
@@ -235,7 +246,7 @@ const corsHeaders = (allowedOrigin?: string) =>
     ? {
         'Access-Control-Allow-Origin': allowedOrigin,
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
         'Cache-Control': 'no-store',
         'Pragma': 'no-cache',
         'X-Content-Type-Options': 'nosniff',
@@ -368,6 +379,39 @@ const fetchMessages = async (
   return (result.Items || []) as ChatMessageRecord[];
 };
 
+const deleteConversationMessages = async (
+  userId: string,
+  conversationId: string
+): Promise<number> => {
+  if (!CHAT_TABLE_NAME) return 0;
+  const items = await fetchMessages(userId, conversationId);
+  const ddb = getDynamoClient();
+  let deleted = 0;
+  for (const item of items) {
+    await ddb.send(
+      new DeleteCommand({
+        TableName: CHAT_TABLE_NAME,
+        Key: { userId, createdAt: item.createdAt },
+      })
+    );
+    deleted++;
+  }
+
+  const redis = getRedisClient();
+  if (redis) {
+    const redisKey = `chat:${userId}:${conversationId}`;
+    try {
+      const connected = await connectRedisSafely(redis);
+      if (connected) {
+        await redis.del(redisKey);
+      }
+    } catch {
+      // Non-critical; Redis TTL will clean up eventually.
+    }
+  }
+  return deleted;
+};
+
 const summarizeConversations = (items: ChatMessageRecord[]): ConversationSummary[] => {
   const map = new Map<string, ConversationSummary>();
 
@@ -413,9 +457,61 @@ const compactMessagesForModel = (messages: ChatMessage[]): ChatMessage[] => {
   }));
 };
 
+type XaiModelMessage =
+  | { role: ChatRole; content: string }
+  | {
+      role: ChatRole;
+      content: Array<
+        | { type: 'text'; text: string }
+        | { type: 'image_url'; image_url: { url: string } }
+      >;
+    };
+
+const toXaiMessages = (
+  messages: ChatMessage[],
+  attachments?: ChatAttachment[]
+): XaiModelMessage[] => {
+  const imageAttachments = (attachments || [])
+    .filter(
+      (item) =>
+        item.type === 'image' &&
+        typeof item.dataUrl === 'string' &&
+        item.dataUrl.startsWith('data:image/')
+    )
+    .slice(0, Math.max(0, maxImageAttachmentsPerRequest));
+
+  if (!imageAttachments.length) {
+    return messages.map((message) => ({ role: message.role, content: message.content }));
+  }
+
+  const lastUserMessageIndex = [...messages]
+    .map((message, index) => ({ message, index }))
+    .reverse()
+    .find((entry) => entry.message.role === 'user')?.index;
+
+  return messages.map((message, index) => {
+    if (index !== lastUserMessageIndex) {
+      return { role: message.role, content: message.content };
+    }
+
+    const content: Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }> =
+      [{ type: 'text', text: message.content }];
+
+    imageAttachments.forEach((attachment) => {
+      if (!attachment.dataUrl) return;
+      content.push({
+        type: 'image_url',
+        image_url: { url: attachment.dataUrl },
+      });
+    });
+
+    return { role: message.role, content };
+  });
+};
+
 const callXaiWithModel = async (
   model: string,
-  messages: ChatMessage[],
+  messages: XaiModelMessage[],
   timeoutMs: number
 ): Promise<string> => {
   if (!XAI_API_URL || !XAI_API_KEY) {
@@ -463,7 +559,7 @@ const callXaiWithModel = async (
   return content as string;
 };
 
-const callXai = async (messages: ChatMessage[]) => {
+const callXai = async (messages: XaiModelMessage[]) => {
   try {
     return await callXaiWithModel(primaryModel, messages, xaiRequestTimeoutMs);
   } catch (error: any) {
@@ -535,6 +631,15 @@ export const handler = async (
       );
     }
 
+    if (event.requestContext.http.method === 'DELETE') {
+      const conversationId = event.queryStringParameters?.conversationId;
+      if (!conversationId) {
+        return respond(400, { error: 'conversationId is required.' }, allowedOrigin);
+      }
+      const deleted = await deleteConversationMessages(userId, conversationId);
+      return respond(200, { deleted, conversationId }, allowedOrigin);
+    }
+
     if (!event.body) {
       return respond(400, { error: 'Missing request body.' }, allowedOrigin);
     }
@@ -543,12 +648,13 @@ export const handler = async (
     if (!request.messages || request.messages.length === 0) {
       return respond(400, { error: 'Request must include messages.' }, allowedOrigin);
     }
+    const shouldPersist = request.persist !== false;
 
     const conversationId =
       request.conversationId || `conv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const redisKey = `chat:${userId}:${conversationId}`;
 
-    const redisMessages = await loadRedisMessages(redisKey);
+    const redisMessages = shouldPersist ? await loadRedisMessages(redisKey) : [];
     const combinedMessages: ChatMessage[] = [];
 
     if (AI_SYSTEM_PROMPT) {
@@ -557,18 +663,22 @@ export const handler = async (
 
     const modelInputMessages = compactMessagesForModel([...redisMessages, ...request.messages]);
     combinedMessages.push(...modelInputMessages);
-
-    const responseMessage = await callXai(combinedMessages);
+    const xaiMessages = toXaiMessages(combinedMessages, request.attachments);
+    const responseMessage = await callXai(xaiMessages);
 
     const assistantMessage: ChatMessage = {
       role: 'assistant',
       content: responseMessage,
     };
 
-    await appendRedisMessages(redisKey, [...request.messages, assistantMessage]);
+    if (shouldPersist) {
+      await appendRedisMessages(redisKey, [...request.messages, assistantMessage]);
+    }
 
-    for (const msg of [...request.messages, assistantMessage]) {
-      await persistMessage(userId, conversationId, msg);
+    if (shouldPersist) {
+      for (const msg of [...request.messages, assistantMessage]) {
+        await persistMessage(userId, conversationId, msg);
+      }
     }
 
     const response: ChatResponse = {

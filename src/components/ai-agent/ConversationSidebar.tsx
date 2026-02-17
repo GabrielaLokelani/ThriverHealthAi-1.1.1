@@ -9,6 +9,7 @@ interface ConversationSidebarProps {
   onDeleteConversation: (conversationId: string) => void;
   onRenameConversation: (conversationId: string, newTitle: string) => void;
   onTogglePin: (conversationId: string) => void;
+  onToggleLock: (conversationId: string) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
 }
@@ -21,6 +22,7 @@ export function ConversationSidebar({
   onDeleteConversation,
   onRenameConversation,
   onTogglePin,
+  onToggleLock,
   searchQuery,
   onSearchChange,
 }: ConversationSidebarProps) {
@@ -116,8 +118,13 @@ export function ConversationSidebar({
                   </svg>
                 )}
                 <h3 className="font-medium truncate">{conversation.title}</h3>
+                {conversation.isLocked && (
+                  <svg className="w-3.5 h-3.5 flex-shrink-0 text-amber-500 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                  </svg>
+                )}
               </div>
-              {conversation.lastMessage && (
+              {conversation.lastMessage && !conversation.isLocked && (
                 <p
                   className={`text-xs mt-1 truncate ${
                     isActive
@@ -184,6 +191,34 @@ export function ConversationSidebar({
                     strokeWidth={2}
                     d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
                   />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleLock(conversation.id);
+                }}
+                className={`p-1 rounded ${
+                  isActive
+                    ? 'hover:bg-primary-600'
+                    : 'hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+                title={conversation.isLocked ? 'Remove lock' : 'Lock conversation'}
+                aria-label={conversation.isLocked ? `Unlock ${conversation.title}` : `Lock ${conversation.title}`}
+              >
+                <svg
+                  className={`w-4 h-4 ${conversation.isLocked ? 'text-amber-500 dark:text-amber-400' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                >
+                  {conversation.isLocked ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                  )}
                 </svg>
               </button>
               <button

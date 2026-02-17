@@ -43,6 +43,7 @@ export function HealthSummary() {
 
       const response = await grokClient.queryHealth(prompt, {
         recentMessages,
+        persist: false,
       });
 
       setSummary({
